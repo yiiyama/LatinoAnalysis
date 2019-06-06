@@ -23,6 +23,7 @@ namespace nanoaod {
     {'F', "hoe"},
     {'F', "eInvMinusPInv"},
     {'F', "eCorr"},
+    {'F', "deltaEtaSC"},
     {'b', "lostHits"},
     {'I', "jetIdx"},
     {'I', "vidNestedWPBitmap"}

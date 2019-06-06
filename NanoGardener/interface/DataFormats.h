@@ -166,6 +166,7 @@ namespace nanoaod {
       _hoe,
       _eInvMinusPInv,
       _eCorr,
+      _deltaEtaSC,
       _lostHits,
       _jetIdx,
       _vidNestedWPBitmap,
@@ -182,6 +183,7 @@ namespace nanoaod {
     double hoe(unsigned iE) const { return getF(_hoe, iE); }
     double eInvMinusPInv(unsigned iE) const { return getF(_eInvMinusPInv, iE); }
     double eCorr(unsigned iE) const { return getF(_eCorr, iE); }
+    double deltaEtaSC(unsigned iE) const { return getF(_deltaEtaSC, iE); }
     unsigned char lostHits(unsigned iE) const { return getb(_lostHits, iE); }
     int jetIdx(unsigned iE) const { return getI(_jetIdx, iE); }
     int vidNestedWPBitmap(unsigned iE) const { return getI(_vidNestedWPBitmap, iE); }
@@ -209,6 +211,7 @@ namespace nanoaod {
     };
   
     bool passCuts(unsigned iE, WorkingPoint wp, unsigned cuts) const;
+    double etaSC(unsigned iP) const { return eta(iP) + deltaEtaSC(iP); }
   };
 
   class MuonCollection : public BaseLeptonCollection {

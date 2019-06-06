@@ -93,7 +93,8 @@ namespace fakeskim {
     virtual void bookBranches(TTree*) = 0;
     std::vector<TString> const& triggers() const { return triggers_; }
     virtual bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const = 0;
-    virtual bool processEvent() = 0;
+    virtual bool passSkim() = 0;
+    virtual void setWeights() {}
   protected:
     Event const& event_;
     std::vector<TString> triggers_;
@@ -109,11 +110,12 @@ namespace fakeskim {
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
       return nElectron == 1 && nPositron == 1 && nMuon == 0 && nAntimuon == 0;
     }
-    bool processEvent() override;
+    bool passSkim() override;
 
   private:
     bool Electron_isTag[Event::NMAX]{};
     bool Electron_isProbe[Event::NMAX]{};
+    bool Electron_isCaloIdLTrackIdLIsoVL[Event::NMAX]{};
     float Electron_mee[Event::NMAX]{};
     float Electron_tagWeight[Event::NMAX]{};
     bool Jet_EEOSClean[Event::NMAX]{};
@@ -129,11 +131,12 @@ namespace fakeskim {
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
       return nElectron + nPositron >= 1;
     }
-    bool processEvent() override;
+    bool passSkim() override;
+    void setWeights() override;
 
   private:
     std::array<unsigned, 2> indices{};
-    float sameSignDielectronWeight{};
+    float skimWeight{};
   };
 
   class DimuonElectronSkim : public FakeSkim {
@@ -146,14 +149,15 @@ namespace fakeskim {
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
       return nMuon == 1 && nAntimuon == 1;
     }
-    bool processEvent() override;
+    bool passSkim() override;
 
   private:
     std::array<unsigned, 2> tightMu{};
     float mmm{};
     float Electron_minDRMu[Event::NMAX]{};
+    float Electron_isCaloIdLTrackIdLIsoVL[Event::NMAX]{};
     float Electron_mmme[Event::NMAX]{};
-    float dimuonElectronWeight{};
+    float skimWeight{};
   };
 
   class DimuonPhotonSkim : public FakeSkim {
@@ -166,14 +170,14 @@ namespace fakeskim {
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
       return nMuon == 1 && nAntimuon == 1;
     }
-    bool processEvent() override;
+    bool passSkim() override;
 
   private:
     std::array<unsigned, 2> tightMu{};
     float mmm{};
     float Photon_minDRMu[Event::NMAX]{};
     float Photon_mmmg[Event::NMAX]{};
-    float dimuonPhotonWeight{};
+    float skimWeight{};
   };
 
   class SameSignMuonElectronSkim : public FakeSkim {
@@ -186,11 +190,11 @@ namespace fakeskim {
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
       return nMuon + nAntimuon >= 1;
     }
-    bool processEvent() override;
+    bool passSkim() override;
 
   private:
     unsigned tightMu{};
-    float sameSignMuonElectronWeight{};
+    float skimWeight{};
   };
 
   class JetElectronSkim : public FakeSkim {
@@ -203,7 +207,7 @@ namespace fakeskim {
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
       return true;
     }
-    bool processEvent() override;
+    bool passSkim() override;
 
   private:
     float Electron_minDPhiJet[Event::NMAX]{};
@@ -450,15 +454,16 @@ fakeskim::OppositeSignDielectronSkim::OppositeSignDielectronSkim(OppositeSignDie
 void
 fakeskim::OppositeSignDielectronSkim::bookBranches(TTree* outTree)
 {
-  outTree->Branch("Electron_isTag", Electron_isTag, "Electron_isTag[nElectron]/O");
-  outTree->Branch("Electron_isProbe", Electron_isProbe, "Electron_isProbe[nElectron]/O");
-  outTree->Branch("Electron_mee", Electron_mee, "Electron_mee[nElectron]/F");
-  outTree->Branch("Electron_tagWeight", Electron_tagWeight, "Electron_tagWeight[nElectron]/F");
-  outTree->Branch("Jet_EEOSClean", Jet_EEOSClean, "Jet_EEOSClean[nJet]/O");
+  outTree->Branch("Electron_OS2E_isTag", Electron_isTag, "Electron_OS2E_isTag[nElectron]/O");
+  outTree->Branch("Electron_OS2E_isProbe", Electron_isProbe, "Electron_OS2E_isProbe[nElectron]/O");
+  outTree->Branch("Electron_OS2E_isCaloIdLTrackIdLIsoVL", Electron_isCaloIdLTrackIdLIsoVL, "Electron_OS2E_isCaloIdLTrackIdLIsoVL[nElectron]/O");
+  outTree->Branch("Electron_OS2E_mee", Electron_mee, "Electron_OS2E_mee[nElectron]/F");
+  outTree->Branch("Electron_OS2E_tagWeight", Electron_tagWeight, "Electron_OS2E_tagWeight[nElectron]/F");
+  outTree->Branch("Jet_OS2E_EEOSClean", Jet_EEOSClean, "Jet_OS2E_EEOSClean[nJet]/O");
 }
 
 bool
-fakeskim::OppositeSignDielectronSkim::processEvent()
+fakeskim::OppositeSignDielectronSkim::passSkim()
 {
   auto& electrons(event_.electrons);
   unsigned nE(electrons.size());
@@ -525,14 +530,25 @@ fakeskim::OppositeSignDielectronSkim::processEvent()
 
       double probePt(electrons.pt(iProbe));
 
-      Electron_isProbe[iProbe] = Electron_isTag[iTag];
+      Electron_isProbe[iProbe] = true;
+
+      // We normalize the Z peak by all baseline electrons, but are interested in trigger + tag combined efficiencies.
+      // Therefore we flag the electrons matching the trigger but won't continue / return false upon mismatch
+      if (Electron_isTag[iTag]) {
+        if (event_.isMC())
+          Electron_isCaloIdLTrackIdLIsoVL[iProbe] = true;
+        else
+          Electron_isCaloIdLTrackIdLIsoVL[iProbe] = \
+            electrons.deltaR2Match(iTag, trigObjs, ele23Objs, 0.1) ||
+            electrons.deltaR2Match(iTag, trigObjs, ele12Objs, 0.1);
+      }
 
       if (Electron_isProbe[iProbe]) {
         Electron_mee[iProbe] = (electrons.p4(iTag) + electrons.p4(iProbe)).M();
         if (event_.isMC()) {
           Electron_tagWeight[iProbe] = \
-            event_.getScaleFactorMap(Event::Ele35_WPTight_Gsf).get(tagPt, electrons.eta(iTag));// * \
-                                                                                                  // event_.scaleFactors.getSF(ScaleFactor::ElectronTightId, tagPt, electrons.eta(iTag));
+            event_.getScaleFactorMap(Event::Ele35_WPTight_Gsf).get(tagPt, electrons.eta(iTag)) * \
+            event_.getScaleFactorMap(Event::ElectronTightId).get(tagPt, electrons.etaSC(iTag));
         }
       }
     }
@@ -569,14 +585,33 @@ fakeskim::SameSignDielectronSkim::SameSignDielectronSkim(SameSignDielectronSkim 
 void
 fakeskim::SameSignDielectronSkim::bookBranches(TTree* outTree)
 {
-  outTree->Branch("leadE", indices.data(), "leadE/i");
-  outTree->Branch("trailE", indices.data() + 1, "trailE/i");
-  outTree->Branch("sameSignDielectronWeight", &sameSignDielectronWeight, "sameSignDieletronWeight/F");
+  outTree->Branch("leadE_SS2E", indices.data(), "leadE_SS2E/i");
+  outTree->Branch("trailE_SS2E", indices.data() + 1, "trailE_SS2E/i");
+  outTree->Branch("skimWeight_SS2E", &skimWeight, "skimWeight_SS2E/F");
 }
 
 bool
-fakeskim::SameSignDielectronSkim::processEvent()
+fakeskim::SameSignDielectronSkim::passSkim()
 {
+  auto& trigObjs(event_.trigObjs);
+  std::vector<unsigned> ele23Objs;
+  std::vector<unsigned> ele12Objs;
+  if (!event_.isMC()) {
+    unsigned nO(trigObjs.size());
+    for (unsigned iO(0); iO != nO; ++iO) {
+      if (trigObjs.id(iO) != 11)
+        continue;
+      int filterBits(trigObjs.filterBits(iO));
+      double pt(trigObjs.pt(iO));
+      if ((filterBits & 1) != 0) {
+        if (pt > 23.)
+          ele23Objs.push_back(iO);
+        if (pt > 12.)
+          ele12Objs.push_back(iO);
+      }
+    }
+  }
+
   auto& electrons(event_.electrons);
   unsigned nE(electrons.size());
 
@@ -586,6 +621,12 @@ fakeskim::SameSignDielectronSkim::processEvent()
   for (unsigned iE(0); iE != nE; ++iE) {
     if (!event_.Electron_isBaseline[iE])
       continue;
+
+    // Here we strictly require that there be exactly two baseline electrons, which are same sign, and match the trigger objects
+    if (!event_.isMC()) {
+      if (!electrons.deltaR2Match(iE, trigObjs, ele23Objs, 0.1) && !electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1))
+        return false;
+    }
 
     if (indices[0] == nE)
       indices[0] = iE;
@@ -597,11 +638,17 @@ fakeskim::SameSignDielectronSkim::processEvent()
     }
   }
 
-  if (indices[1] == nE)
-    return false;
+  return indices[1] != nE;
+}
 
+void
+fakeskim::SameSignDielectronSkim::setWeights()
+{
   if (event_.isMC()) {
-    sameSignDielectronWeight = 1.;
+    auto& electrons(event_.electrons);
+    unsigned nE(electrons.size());
+
+    skimWeight = 1.;
     
     for (unsigned iE(0); iE != nE; ++iE) {
       if (!event_.Electron_prompt[iE] || !event_.Electron_isTight[iE])
@@ -612,11 +659,11 @@ fakeskim::SameSignDielectronSkim::processEvent()
 
       double nonFiring(1. - event_.getScaleFactorMap(Event::Ele23_CaloIdL_TrackIdL_IsoVL).get(pt, eta));
       nonFiring *= 1. - event_.getScaleFactorMap(Event::Ele12_CaloIdL_TrackIdL_IsoVL).get(pt, eta);
-      sameSignDielectronWeight *= 1. - nonFiring;
+      skimWeight *= 1. - nonFiring;
+      
+      skimWeight *= event_.getScaleFactorMap(Event::ElectronTightId).get(pt, electrons.etaSC(iE));
     }
   }
-
-  return true;
 }
 
 fakeskim::DimuonElectronSkim::DimuonElectronSkim(Event const& event) :
@@ -638,16 +685,17 @@ fakeskim::DimuonElectronSkim::DimuonElectronSkim(DimuonElectronSkim const& orig)
 void
 fakeskim::DimuonElectronSkim::bookBranches(TTree* outTree)
 {
-  outTree->Branch("tightMu0", tightMu.data(), "tightMu0/i");
-  outTree->Branch("tightMu1", tightMu.data() + 1, "tightMu1/i");
-  outTree->Branch("mmm", &mmm, "mmm/F");
-  outTree->Branch("Electron_minDRMu", Electron_minDRMu, "Electron_minDRMu[nElectron]/F");
-  outTree->Branch("Electron_mmme", Electron_mmme, "Electron_mmme[nElectron]/F");
-  outTree->Branch("dimuonElectronWeight", &dimuonElectronWeight, "dimuonElectronWeight/F");
+  outTree->Branch("tightMu0_2ME", tightMu.data(), "tightMu0_2ME/i");
+  outTree->Branch("tightMu1_2ME", tightMu.data() + 1, "tightMu1_2ME/i");
+  outTree->Branch("mmm_2ME", &mmm, "mmm_2ME/F");
+  outTree->Branch("Electron_2ME_isCaloIdLTrackIdLIsoVL", Electron_isCaloIdLTrackIdLIsoVL, "Electron_2ME_isCaloIdLTrackIdLIsoVL[nElectron]/O");
+  outTree->Branch("Electron_2ME_minDRMu", Electron_minDRMu, "Electron_2ME_minDRMu[nElectron]/F");
+  outTree->Branch("Electron_2ME_mmme", Electron_mmme, "Electron_2ME_mmme[nElectron]/F");
+  outTree->Branch("skimWeight_2ME", &skimWeight, "skimWeight_2ME/F");
 }
 
 bool
-fakeskim::DimuonElectronSkim::processEvent()
+fakeskim::DimuonElectronSkim::passSkim()
 {
   auto& electrons(event_.electrons);
   unsigned nE(electrons.size());
@@ -683,20 +731,55 @@ fakeskim::DimuonElectronSkim::processEvent()
   if (mmm < 20.)
     return false;
 
+  auto& trigObjs(event_.trigObjs);
+  std::vector<unsigned> ele23Objs;
+  std::vector<unsigned> ele12Objs;
+  if (!event_.isMC()) {
+    unsigned nO(trigObjs.size());
+    for (unsigned iO(0); iO != nO; ++iO) {
+      if (trigObjs.id(iO) != 11)
+        continue;
+      int filterBits(trigObjs.filterBits(iO));
+      double pt(trigObjs.pt(iO));
+      if ((filterBits & 1) != 0) {
+        if (pt > 23.)
+          ele23Objs.push_back(iO);
+        if (pt > 12.)
+          ele12Objs.push_back(iO);
+      }
+    }
+  }
+
+  bool hasElectron(false);
+
   for (unsigned iE(0); iE != nE; ++iE) {
     if (!event_.Electron_isBaseline[iE])
       continue;
 
+    // Here we are interested in tag + trigger combined efficiencies but can allow multiple baseline electrons.
+    // The normalization for conversion scale factor efficiency comes from mumugamma, so we don't need to tag & save
+    // but can simply continue in case of mismatch.
+    if (!event_.isMC()) {
+      if (!electrons.deltaR2Match(iE, trigObjs, ele23Objs, 0.1) && !electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1))
+        continue;
+    }
+
+    Electron_isCaloIdLTrackIdLIsoVL[iE] = true;
+    hasElectron = true;
+
     Electron_minDRMu[iE] = std::sqrt(std::min(electrons.deltaR2(iE, muons, tightMu[0]), electrons.deltaR2(iE, muons, tightMu[1])));
     Electron_mmme[iE] = (pmm + electrons.p4(iE)).M();
   }
+
+  if (!hasElectron)
+    return false;
 
   if (event_.isMC()) {
     double pt0(muons.pt(tightMu[0]));
     double eta0(muons.eta(tightMu[0]));
     double pt1(muons.pt(tightMu[1]));
     double eta1(muons.eta(tightMu[1]));
-    dimuonElectronWeight = 1. - \
+    skimWeight = 1. - \
       (1. - event_.getScaleFactorMap(Event::Mu23_TrkIsoVVL).get(pt0, eta0)) * \
       (1. - event_.getScaleFactorMap(Event::Mu12_TrkIsoVVL).get(pt0, eta0)) * \
       (1. - event_.getScaleFactorMap(Event::Mu23_TrkIsoVVL).get(pt1, eta1)) * \
@@ -723,19 +806,16 @@ fakeskim::DimuonPhotonSkim::DimuonPhotonSkim(DimuonPhotonSkim const& orig) :
 void
 fakeskim::DimuonPhotonSkim::bookBranches(TTree* outTree)
 {
-  if (outTree->GetBranch("tightMu0") == nullptr)
-    outTree->Branch("tightMu0", tightMu.data(), "tightMu0/i");
-  if (outTree->GetBranch("tightMu1") == nullptr)
-    outTree->Branch("tightMu1", tightMu.data() + 1, "tightMu1/i");
-  if (outTree->GetBranch("mmm") == nullptr)
-    outTree->Branch("mmm", &mmm, "mmm/F");
-  outTree->Branch("Photon_minDRMu", Photon_minDRMu, "Photon_minDRMu[nPhoton]/F");
-  outTree->Branch("Photon_mmmg", Photon_mmmg, "Photon_mmmg[nPhoton]/F");
-  outTree->Branch("dimuonPhotonWeight", &dimuonPhotonWeight, "dimuonPhotonWeight/F");
+  outTree->Branch("tightMu0_2MG", tightMu.data(), "tightMu0_2MG/i");
+  outTree->Branch("tightMu1_2MG", tightMu.data() + 1, "tightMu1_2MG/i");
+  outTree->Branch("mmm_2MG", &mmm, "mmm_2MG/F");
+  outTree->Branch("Photon_2MG_minDRMu", Photon_minDRMu, "Photon_2MG_minDRMu[nPhoton]/F");
+  outTree->Branch("Photon_2MG_mmmg", Photon_mmmg, "Photon_2MG_mmmg[nPhoton]/F");
+  outTree->Branch("skimWeight_2MG", &skimWeight, "skimWeight_2MG/F");
 }
 
 bool
-fakeskim::DimuonPhotonSkim::processEvent()
+fakeskim::DimuonPhotonSkim::passSkim()
 {
   auto& muons(event_.muons);
 
@@ -781,7 +861,7 @@ fakeskim::DimuonPhotonSkim::processEvent()
     double eta0(muons.eta(tightMu[0]));
     double pt1(muons.pt(tightMu[1]) * 1.5);
     double eta1(muons.eta(tightMu[1]));
-    dimuonPhotonWeight = \
+    skimWeight = \
       (1. - (1. - event_.getScaleFactorMap(Event::Mu23_TrkIsoVVL).get(pt0, eta0)) * (1. - event_.getScaleFactorMap(Event::Mu12_TrkIsoVVL).get(pt0, eta0))) * \
       (1. - (1. - event_.getScaleFactorMap(Event::Mu23_TrkIsoVVL).get(pt1, eta1)) * (1. - event_.getScaleFactorMap(Event::Mu12_TrkIsoVVL).get(pt1, eta1)));
   }
@@ -808,12 +888,12 @@ fakeskim::SameSignMuonElectronSkim::SameSignMuonElectronSkim(SameSignMuonElectro
 void
 fakeskim::SameSignMuonElectronSkim::bookBranches(TTree* outTree)
 {
-  outTree->Branch("tightMu", &tightMu, "tightMu/i");
-  outTree->Branch("sameSignMuonElectronWeight", &sameSignMuonElectronWeight, "sameSignMuonElectronWeight/F");
+  outTree->Branch("tightMu_SSME", &tightMu, "tightMu_SSME/i");
+  outTree->Branch("skimWeight_SSME", &skimWeight, "skimWeight_SSME/F");
 }
 
 bool
-fakeskim::SameSignMuonElectronSkim::processEvent()
+fakeskim::SameSignMuonElectronSkim::passSkim()
 {
   auto& muons(event_.muons);
 
@@ -834,6 +914,25 @@ fakeskim::SameSignMuonElectronSkim::processEvent()
   if (tightMu == nM)
     return false;
 
+  auto& trigObjs(event_.trigObjs);
+  std::vector<unsigned> ele23Objs;
+  std::vector<unsigned> ele12Objs;
+  if (!event_.isMC()) {
+    unsigned nO(trigObjs.size());
+    for (unsigned iO(0); iO != nO; ++iO) {
+      if (trigObjs.id(iO) != 11)
+        continue;
+      int filterBits(trigObjs.filterBits(iO));
+      double pt(trigObjs.pt(iO));
+      if ((filterBits & 1) != 0) {
+        if (pt > 23.)
+          ele23Objs.push_back(iO);
+        if (pt > 12.)
+          ele12Objs.push_back(iO);
+      }
+    }
+  }
+
   auto& electrons(event_.electrons);
   unsigned nE(electrons.size());
 
@@ -850,6 +949,12 @@ fakeskim::SameSignMuonElectronSkim::processEvent()
       return false;
 
     oneBaseline = true;
+
+    // Here the requirement is exactly one baseline electron, which has the same charge as the muon, and matches the trigger object.
+    if (!event_.isMC()) {
+      if (!electrons.deltaR2Match(iE, trigObjs, ele23Objs, 0.1) && !electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1))
+        return false;
+    }
   }
 
   if (!oneBaseline)
@@ -859,7 +964,7 @@ fakeskim::SameSignMuonElectronSkim::processEvent()
     double pt(muons.pt(tightMu));
     double eta(muons.eta(tightMu));
     
-    sameSignMuonElectronWeight = 1. - \
+    skimWeight = 1. - \
       (1. - event_.getScaleFactorMap(Event::Mu23_TrkIsoVVL).get(pt, eta)) * \
       (1. - event_.getScaleFactorMap(Event::Mu12_TrkIsoVVL).get(pt, eta));
   }
@@ -882,24 +987,52 @@ fakeskim::JetElectronSkim::JetElectronSkim(JetElectronSkim const& orig) :
 void
 fakeskim::JetElectronSkim::bookBranches(TTree* outTree)
 {
-  outTree->Branch("Electron_minDPhiJet", Electron_minDPhiJet, "Electron_minDPhiJet[nElectron]");
-  outTree->Branch("Electron_ptOppJet", Electron_ptOppJet, "Electron_ptOppJet[nElectron]");
+  outTree->Branch("Electron_JE_minDPhiJet", Electron_minDPhiJet, "Electron_JE_minDPhiJet[nElectron]");
+  outTree->Branch("Electron_JE_ptOppJet", Electron_ptOppJet, "Electron_JE_ptOppJet[nElectron]");
 }
   
 bool
-fakeskim::JetElectronSkim::processEvent()
+fakeskim::JetElectronSkim::passSkim()
 {
   if (event_.met.pt() > 20.)
     return false;
+
+  auto& trigObjs(event_.trigObjs);
+  std::vector<unsigned> ele12Objs;
+  if (!event_.isMC()) {
+    unsigned nO(trigObjs.size());
+    for (unsigned iO(0); iO != nO; ++iO) {
+      if (trigObjs.id(iO) != 11)
+        continue;
+      int filterBits(trigObjs.filterBits(iO));
+      double pt(trigObjs.pt(iO));
+      if ((filterBits & 1) != 0) {
+        if (pt > 12.)
+          ele12Objs.push_back(iO);
+      }
+    }
+  }
 
   auto& electrons(event_.electrons);
   auto& jets(event_.jets);
   unsigned nE(electrons.size());
   unsigned nJ(jets.size());
 
+  bool oneElectron(false);
+
   for (unsigned iE(0); iE != nE; ++iE) {
     if (!event_.Electron_isBaseline[iE])
       continue;
+
+    if (oneElectron)
+      return false;
+
+    if (!event_.isMC()) {
+      if (!electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1))
+        return false;
+    }
+
+    oneElectron = true;
 
     double phi(electrons.phi(iE));
     unsigned jetIdx(electrons.jetIdx(iE));

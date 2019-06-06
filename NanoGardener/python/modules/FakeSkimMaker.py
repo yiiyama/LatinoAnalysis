@@ -129,23 +129,26 @@ class FakeSkimMaker(Module):
         if not self.event.selectLeptons(isBaseline):
             return False
 
-        passSkim = dict((skim.getName(), False) for skim in self.skims)
+        iskim = 0
+        while iskim != len(skims):
+            skim = skims[iskim]
+            if skim.passSkim():
+                iskim += 1
+            else:
+                skims.pop(iskim)
 
-        passAny = False
-        for skim in skims:
-            if skim.processEvent():
-                passSkim[skim.getName()] = True
-                passAny = True
-
-        if not passAny:
+        if len(skims):
             return False
 
         self.event.setFlags()
 
+        for skim in skims:
+            skim.setWeights()
+
         if self.event.usingLatinos():
             self.out.fillBranch('Lepton_isBaseline', list(bool(x) for x in isBaseline))
         for skim in self.skims:
-            self.out.fillBranch('pass%s' % skim.getName(), passSkim[skim.getName()])
+            self.out.fillBranch('pass%s' % skim.getName(), (skim in skims))
 
         return True
 
@@ -185,98 +188,124 @@ class FakeSkimMaker(Module):
         self.event.leptons.addTightMuonWP('cut_Tight_HWWW')
 
         cmssw_base = os.getenv('CMSSW_BASE')
-        datadir = cmssw_base + '/src/LatinoAnalysis/NanoGardener/python/data/trigger/Full2017'
+        datadir = cmssw_base + '/src/LatinoAnalysis/NanoGardener/python/data'
 
-        etabinning = [-2.5, -2.1, -1.6, -1.4, -0.8, 0., 0.8, 1.4, 1.6, 2.1, 2.5]
-        ptbinning = [0., 10., 20., 30.] + [32. + x for x in range(7)] + [40., 45., 50., 60., 100., 200.]
-        ele35WPTightGsfMap = ROOT.TH2D('ele35', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
-        ptbinning = [0., 10.] + [20. + x for x in range(7)] + [30. + 5. * x for x in range(5)] + [60., 100., 200.]
-        ele23CaloIdLTrackIdLIsoVLMap = ROOT.TH2D('ele23', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
-        ptbinning = [0.] + [10. + x for x in range(6)] + [20. + 5. * x for x in range(7)] + [60., 100., 200.]
-        ele12CaloIdLTrackIdLIsoVLMap = ROOT.TH2D('ele12', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
-
-        lumitotal = 0.
-        for era, lumi in [('B', 4.823), ('CDE', 9.664 + 4.252 + 9.278), ('F', 13.54)]:
-            lumitotal += lumi
-            
-            tmpmap = ele35WPTightGsfMap.Clone('tmpmap')
-            with open(datadir + '/Ele35_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
-                for line in source:
-                    etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
-                    ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
-                    iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
-                    tmpmap.SetBinContent(ix, iy, eff * lumi)
-
-            ele35WPTightGsfMap.Add(tmpmap)
-            tmpmap.Delete()
-
-            tmpmap = ele23CaloIdLTrackIdLIsoVLMap.Clone('tmpmap')
-            with open(datadir + '/Ele23_Ele12_leg1_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
-                for line in source:
-                    etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
-                    ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
-                    iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
-                    tmpmap.SetBinContent(ix, iy, eff * lumi)
-
-            ele23CaloIdLTrackIdLIsoVLMap.Add(tmpmap)
-            tmpmap.Delete()
-
-            tmpmap = ele12CaloIdLTrackIdLIsoVLMap.Clone('tmpmap')
-            with open(datadir + '/Ele23_Ele12_leg2_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
-                for line in source:
-                    etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
-                    ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
-                    iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
-                    tmpmap.SetBinContent(ix, iy, eff * lumi)
-
-            ele12CaloIdLTrackIdLIsoVLMap.Add(tmpmap)
-            tmpmap.Delete()
-
-        ele35WPTightGsfMap.Scale(1. / lumitotal)
-        self.event.setScaleFactorMap(ROOT.fakeskim.Event.Ele35_WPTight_Gsf, ele35WPTightGsfMap)
-        ele23CaloIdLTrackIdLIsoVLMap.Scale(1. / lumitotal)
-        self.event.setScaleFactorMap(ROOT.fakeskim.Event.Ele23_CaloIdL_TrackIdL_IsoVL, ele23CaloIdLTrackIdLIsoVLMap)
-        ele12CaloIdLTrackIdLIsoVLMap.Scale(1. / lumitotal)
-        self.event.setScaleFactorMap(ROOT.fakeskim.Event.Ele12_CaloIdL_TrackIdL_IsoVL, ele12CaloIdLTrackIdLIsoVLMap)
-
-        etabinning = [-2.4, -2.1, -1.6, -1.2, -0.8, -0.3, -0.2, 0.2, 0.3, 0.8, 1.2, 1.6, 2.1, 2.4]
-        ptbinning = [0., 10.] + [20. + x for x in range(7)] + [30. + 5. * x for x in range(5)] + [60., 100., 200.]
-        mu23TrkIsoVVLMap = ROOT.TH2D('mu23', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
-        ptbinning = [0.] + [10. + x for x in range(6)] + [20. + 5. * x for x in range(7)] + [60., 100., 200.]
-        mu12TrkIsoVVLMap = ROOT.TH2D('mu12', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
-
-        lumitotal = 0.
-        for era, lumi in [('B', 4.823), ('CD', 9.664 + 4.252), ('E', 9.278), ('F', 13.54)]:
-            lumitotal += lumi
-            
-            tmpmap = mu23TrkIsoVVLMap.Clone('tmpmap')
-            with open(datadir + '/Mu23_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
-                for line in source:
-                    etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
-                    ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
-                    iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
-                    tmpmap.SetBinContent(ix, iy, eff * lumi)
-
-            mu23TrkIsoVVLMap.Add(tmpmap)
-            tmpmap.Delete()
-
-            tmpmap = mu12TrkIsoVVLMap.Clone('tmpmap')
-            with open(datadir + '/Mu12_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
-                for line in source:
-                    etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
-                    ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
-                    iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
-                    tmpmap.SetBinContent(ix, iy, eff * lumi)
-
-            mu12TrkIsoVVLMap.Add(tmpmap)
-            tmpmap.Delete()
-
-        mu23TrkIsoVVLMap.Scale(1. / lumitotal)
-        self.event.setScaleFactorMap(ROOT.fakeskim.Event.Mu23_TrkIsoVVL, mu23TrkIsoVVLMap)
-        mu12TrkIsoVVLMap.Scale(1. / lumitotal)
-        self.event.setScaleFactorMap(ROOT.fakeskim.Event.Mu12_TrkIsoVVL, mu12TrkIsoVVLMap)
-
-        source = ROOT.TFile.Open(cmssw_base + '/src/LatinoAnalysis/NanoGardener/python/data/fake_decomposition/fall17_bhadron_flateff_60.root')
+        source = ROOT.TFile.Open(datadir + '/fake_decomposition/fall17_bhadron_flateff_60.root')
         btagMap = source.Get('varmap')
         self.event.setElectronBTagMap(btagMap)
         source.Close()
+
+        if self.isMC:
+            etabinning = [-2.5, -2.1, -1.6, -1.4, -0.8, 0., 0.8, 1.4, 1.6, 2.1, 2.5]
+            ptbinning = [0., 10., 20., 30.] + [32. + x for x in range(7)] + [40., 45., 50., 60., 100., 200.]
+            ele35WPTightGsfMap = ROOT.TH2D('ele35', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
+            ptbinning = [0., 10.] + [20. + x for x in range(7)] + [30. + 5. * x for x in range(5)] + [60., 100., 200.]
+            ele23CaloIdLTrackIdLIsoVLMap = ROOT.TH2D('ele23', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
+            ptbinning = [0.] + [10. + x for x in range(6)] + [20. + 5. * x for x in range(7)] + [60., 100., 200.]
+            ele12CaloIdLTrackIdLIsoVLMap = ROOT.TH2D('ele12', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
+    
+            lumitotal = 0.
+            for era, lumi in [('B', 4.823), ('CDE', 9.664 + 4.252 + 9.278), ('F', 13.54)]:
+                lumitotal += lumi
+                
+                tmpmap = ele35WPTightGsfMap.Clone('tmpmap')
+                with open(datadir + '/trigger/Full2017/Ele35_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
+                    for line in source:
+                        etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
+                        ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
+                        iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
+                        tmpmap.SetBinContent(ix, iy, eff * lumi)
+    
+                ele35WPTightGsfMap.Add(tmpmap)
+                tmpmap.Delete()
+    
+                tmpmap = ele23CaloIdLTrackIdLIsoVLMap.Clone('tmpmap')
+                with open(datadir + '/trigger/Full2017/Ele23_Ele12_leg1_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
+                    for line in source:
+                        etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
+                        ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
+                        iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
+                        tmpmap.SetBinContent(ix, iy, eff * lumi)
+    
+                ele23CaloIdLTrackIdLIsoVLMap.Add(tmpmap)
+                tmpmap.Delete()
+    
+                tmpmap = ele12CaloIdLTrackIdLIsoVLMap.Clone('tmpmap')
+                with open(datadir + '/trigger/Full2017/Ele23_Ele12_leg2_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
+                    for line in source:
+                        etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
+                        ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
+                        iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
+                        tmpmap.SetBinContent(ix, iy, eff * lumi)
+    
+                ele12CaloIdLTrackIdLIsoVLMap.Add(tmpmap)
+                tmpmap.Delete()
+    
+            ele35WPTightGsfMap.Scale(1. / lumitotal)
+            self.event.setScaleFactorMap(ROOT.fakeskim.Event.Ele35_WPTight_Gsf, ele35WPTightGsfMap)
+            ele23CaloIdLTrackIdLIsoVLMap.Scale(1. / lumitotal)
+            self.event.setScaleFactorMap(ROOT.fakeskim.Event.Ele23_CaloIdL_TrackIdL_IsoVL, ele23CaloIdLTrackIdLIsoVLMap)
+            ele12CaloIdLTrackIdLIsoVLMap.Scale(1. / lumitotal)
+            self.event.setScaleFactorMap(ROOT.fakeskim.Event.Ele12_CaloIdL_TrackIdL_IsoVL, ele12CaloIdLTrackIdLIsoVLMap)
+    
+            etabinning = [-2.4, -2.1, -1.6, -1.2, -0.8, -0.3, -0.2, 0.2, 0.3, 0.8, 1.2, 1.6, 2.1, 2.4]
+            ptbinning = [0., 10.] + [20. + x for x in range(7)] + [30. + 5. * x for x in range(5)] + [60., 100., 200.]
+            mu23TrkIsoVVLMap = ROOT.TH2D('mu23', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
+            ptbinning = [0.] + [10. + x for x in range(6)] + [20. + 5. * x for x in range(7)] + [60., 100., 200.]
+            mu12TrkIsoVVLMap = ROOT.TH2D('mu12', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
+    
+            lumitotal = 0.
+            for era, lumi in [('B', 4.823), ('CD', 9.664 + 4.252), ('E', 9.278), ('F', 13.54)]:
+                lumitotal += lumi
+                
+                tmpmap = mu23TrkIsoVVLMap.Clone('tmpmap')
+                with open(datadir + '/trigger/Full2017/Mu23_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
+                    for line in source:
+                        etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
+                        ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
+                        iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
+                        tmpmap.SetBinContent(ix, iy, eff * lumi)
+    
+                mu23TrkIsoVVLMap.Add(tmpmap)
+                tmpmap.Delete()
+    
+                tmpmap = mu12TrkIsoVVLMap.Clone('tmpmap')
+                with open(datadir + '/trigger/Full2017/Mu12_pt_eta_efficiency_withSys_Run2017' + era + '.txt') as source:
+                    for line in source:
+                        etamin, etamax, ptmin, ptmax, eff, _, _ = map(float, line.split())
+                        ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
+                        iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
+                        tmpmap.SetBinContent(ix, iy, eff * lumi)
+    
+                mu12TrkIsoVVLMap.Add(tmpmap)
+                tmpmap.Delete()
+    
+            mu23TrkIsoVVLMap.Scale(1. / lumitotal)
+            self.event.setScaleFactorMap(ROOT.fakeskim.Event.Mu23_TrkIsoVVL, mu23TrkIsoVVLMap)
+            mu12TrkIsoVVLMap.Scale(1. / lumitotal)
+            self.event.setScaleFactorMap(ROOT.fakeskim.Event.Mu12_TrkIsoVVL, mu12TrkIsoVVLMap)
+
+            etabinning = [-2.5, -2., -1.566, -1.444, -0.8, 0., 0.8, 1.444, 1.566, 2., 2.5]
+            ptbinning = [10., 20., 35., 50., 90., 150., 500.]
+            eleTightIdMap = ROOT.TH2D('eleid', '', len(ptbinning) - 1, array.array('d', ptbinning), len(etabinning) - 1, array.array('d', etabinning))
+    
+            lumitotal = 0.
+            for era, lumi in [('B', 4.823), ('C', 9.664), ('D', 4.252), ('E', 9.278), ('F', 13.54)]:
+                lumitotal += lumi
+                
+                tmpmap = eleTightIdMap.Clone('tmpmap')
+                with open(datadir + '/scale_factor/Full2017/egammaEffi_passingMVA94Xwp90isoHWW_run' + era + '.txt') as source:
+                    for line in source:
+                        entries = map(float, line.split())
+                        etamin, etamax, ptmin, ptmax = entries[:4]
+                        dataeff = entries[4]
+                        mceff = entries[6]
+                        ix = tmpmap.GetXaxis().FindFixBin((ptmin + ptmax) * 0.5)
+                        iy = tmpmap.GetYaxis().FindFixBin((etamin + etamax) * 0.5)
+                        tmpmap.SetBinContent(ix, iy, dataeff / mceff * lumi)
+    
+                eleTightIdMap.Add(tmpmap)
+                tmpmap.Delete()
+    
+            eleTightIdMap.Scale(1. / lumitotal)
+            self.event.setScaleFactorMap(ROOT.fakeskim.Event.ElectronTightId, eleTightIdMap)
