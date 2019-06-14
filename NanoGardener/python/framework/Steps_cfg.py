@@ -148,6 +148,13 @@ Steps = {
                   'subTargets' : ['leptonMaker','lepSel', 'l2Kin', 'l3Kin', 'l4Kin','trigData','formulasDATA'],
                 },
 
+  'DATAFakeCorr2017': {
+                  'isChain'    : True  ,
+                  'do4MC'      : False ,
+                  'do4Data'    : True  ,
+                  'subTargets' : ['trigData','rochesterDATA','jetSel','l2Kin','formulasDATA'],
+                },
+
   'DATACorr2017' : {
                   'isChain'    : True  ,
                   'do4MC'      : False ,
@@ -495,6 +502,50 @@ Steps = {
                   'declare'    : '',
                   'module'     : 'LeptonFakeWMaker("RPLME_CMSSW")',
               },
+
+    'fakeSkimDATA': {
+        'isChain': False,
+        'do4MC': False,
+        'do4Data': True,
+        'import': 'LatinoAnalysis.NanoGardener.modules.FakeSkimMaker',
+        'module': 'FakeSkimMaker("RPLME_CMSSW", ["OppositeSignDielectronSkim", "DimuonElectronSkim", "DimuonPhotonSkim", "SameSignMuonElectronSkim"], False, False)'
+    },
+
+    'fakeSkimMC': {
+        'isChain': False,
+        'do4MC': True,
+        'do4Data': False,
+        'import': 'LatinoAnalysis.NanoGardener.modules.FakeSkimMaker',
+        'module': 'FakeSkimMaker("RPLME_CMSSW", ["OppositeSignDielectronSkim", "DimuonElectronSkim", "DimuonPhotonSkim", "SameSignMuonElectronSkim"], True, False)'
+    },
+
+    'fakeSkimJetElectronDATA': {
+        'isChain': False,
+        'do4MC': False,
+        'do4Data': True,
+        'import': 'LatinoAnalysis.NanoGardener.modules.FakeSkimMaker',
+        'module': 'FakeSkimMaker("RPLME_CMSSW", ["JetElectronSkim", "SameSignDielectronSkim"], False, False)',
+        'onlySample': [
+            "SingleElectron_Run2017B-31Mar2018-v1",
+            "SingleElectron_Run2017C-31Mar2018-v1",
+            "SingleElectron_Run2017D-31Mar2018-v1",
+            "SingleElectron_Run2017E-31Mar2018-v1",
+            "SingleElectron_Run2017F-31Mar2018-v1",
+            "DoubleEG_Run2017B-31Mar2018-v1",
+            "DoubleEG_Run2017C-31Mar2018-v1",
+            "DoubleEG_Run2017D-31Mar2018-v1",
+            "DoubleEG_Run2017E-31Mar2018-v1",
+            "DoubleEG_Run2017F-31Mar2018-v1",
+        ]
+    },
+
+    'fakeSkimJetElectronMC': {
+        'isChain': False,
+        'do4MC': True,
+        'do4Data': False,
+        'import': 'LatinoAnalysis.NanoGardener.modules.FakeSkimMaker',
+        'module': 'FakeSkimMaker("RPLME_CMSSW", ["JetElectronSkim", "SameSignDielectronSkim", "ElectronSkim"], True, False)'
+    },
 
 ## ------- MODULES: Rochester corrections
 

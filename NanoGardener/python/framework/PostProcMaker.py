@@ -425,6 +425,7 @@ class PostProcMaker():
      fPy.write('#!/usr/bin/env python \n')
      fPy.write('import os, sys \n')
      fPy.write('import ROOT \n')
+     fPy.write('import subprocess\n')
      fPy.write('ROOT.PyConfig.IgnoreCommandLineOptions = True \n')
      fPy.write(' \n')
      fPy.write('from PhysicsTools.NanoAODTools.postprocessing.framework.postprocessor import PostProcessor \n')
@@ -453,9 +454,16 @@ class PostProcMaker():
          fPy.write(self.customizeDeclare(iStep)+'\n')
      fPy.write(' \n')
 
+     if self._iniStep == 'Prod':
+       for iFile in inputRootFiles:
+         fPy.write('subprocess.Popen(["xrdcp", "'+iFile+'", "."]).communicate()\n')
+
      # Files
      fPy.write('files=[')
-     for iFile in inputRootFiles : fPy.write('"'+iFile+'",')
+     if self._iniStep == 'Prod':
+       for iFile in inputRootFiles : fPy.write('"./'+os.path.basename(iFile)+'",')
+     else:
+       for iFile in inputRootFiles : fPy.write('"'+iFile+'",')
      fPy.write(']\n') 
      fPy.write(' \n')
      
