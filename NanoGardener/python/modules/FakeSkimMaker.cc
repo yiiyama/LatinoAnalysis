@@ -70,9 +70,14 @@ namespace fakeskim {
     bool Electron_prompt[NMAX]{};
     bool Electron_conversion[NMAX]{};
     bool Electron_tau[NMAX]{};
+    int Electron_hadronFlavour[NMAX]{};
     bool Electron_isBaseline[NMAX]{};
     bool Electron_isTight[NMAX]{};
     bool Electron_btag[NMAX]{};
+    float Electron_btagDeepB[NMAX]{};
+    float Electron_btagDeepC[NMAX]{};
+    float Electron_jetPt[NMAX]{};
+    float Electron_jetEta[NMAX]{};
     bool Muon_isBaseline[NMAX]{};
     bool Muon_isTight[NMAX]{};
     
@@ -118,7 +123,8 @@ namespace fakeskim {
     bool Electron_isCaloIdLTrackIdLIsoVL[Event::NMAX]{};
     float Electron_mee[Event::NMAX]{};
     float Electron_tagWeight[Event::NMAX]{};
-    bool Jet_EEOSClean[Event::NMAX]{};
+    unsigned Electron_njet[Event::NMAX]{};
+    unsigned Electron_nbjet[Event::NMAX]{};
   };
 
   class SameSignDielectronSkim : public FakeSkim {
@@ -136,6 +142,8 @@ namespace fakeskim {
 
   private:
     std::array<unsigned, 2> indices{};
+    unsigned njet{};
+    unsigned nbjet{};
     float skimWeight{};
   };
 
@@ -147,7 +155,7 @@ namespace fakeskim {
     char const* getName() const override { return "DimuonElectronSkim"; }
     void bookBranches(TTree* outTree) override;
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
-      return nMuon == 1 && nAntimuon == 1;
+      return (nMuon == 1 || nAntimuon == 1);
     }
     bool passSkim() override;
 
@@ -157,6 +165,8 @@ namespace fakeskim {
     float Electron_minDRMu[Event::NMAX]{};
     float Electron_isCaloIdLTrackIdLIsoVL[Event::NMAX]{};
     float Electron_mmme[Event::NMAX]{};
+    unsigned Electron_njet[Event::NMAX]{};
+    unsigned Electron_nbjet[Event::NMAX]{};
     float skimWeight{};
   };
 
@@ -168,7 +178,7 @@ namespace fakeskim {
     char const* getName() const override { return "DimuonPhotonSkim"; }
     void bookBranches(TTree* outTree) override;
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
-      return nMuon == 1 && nAntimuon == 1;
+      return (nMuon == 1 || nAntimuon == 1);
     }
     bool passSkim() override;
 
@@ -177,6 +187,8 @@ namespace fakeskim {
     float mmm{};
     float Photon_minDRMu[Event::NMAX]{};
     float Photon_mmmg[Event::NMAX]{};
+    unsigned Photon_njet[Event::NMAX]{};
+    unsigned Photon_nbjet[Event::NMAX]{};
     float skimWeight{};
   };
 
@@ -188,12 +200,14 @@ namespace fakeskim {
     char const* getName() const override { return "SameSignMuonElectronSkim"; }
     void bookBranches(TTree* outTree) override;
     bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
-      return nMuon + nAntimuon >= 1;
+      return nElectron + nPositron + nMuon + nAntimuon >= 1;
     }
     bool passSkim() override;
 
   private:
     unsigned tightMu{};
+    unsigned njet{};
+    unsigned nbjet{};
     float skimWeight{};
   };
 
@@ -212,7 +226,26 @@ namespace fakeskim {
   private:
     float Electron_minDPhiJet[Event::NMAX]{};
     float Electron_ptOppJet[Event::NMAX]{};
+    unsigned Electron_njet[Event::NMAX]{};
+    unsigned Electron_nbjet[Event::NMAX]{};
   };
+
+  class ElectronSkim : public FakeSkim {
+  public:
+    ElectronSkim(Event const& event);
+    ElectronSkim(ElectronSkim const&);
+    ~ElectronSkim() {}
+    char const* getName() const override { return "ElectronSkim"; }
+    void bookBranches(TTree* outTree) override;
+    bool isGoodLHEEvent(unsigned nElectron, unsigned nPositron, unsigned nMuon, unsigned nAntimuon) const override {
+      return true;
+    }
+    bool passSkim() override;
+
+  private:
+    float Electron_isCaloIdLTrackIdLIsoVL[Event::NMAX]{};
+  };
+
 }
 
 void
@@ -270,9 +303,14 @@ fakeskim::Event::bookBranches(TTree* outTree)
   outTree->Branch("Electron_prompt", Electron_prompt, "Electron_prompt[nElectron]/O");
   outTree->Branch("Electron_conversion", Electron_conversion, "Electron_conversion[nElectron]/O");
   outTree->Branch("Electron_tau", Electron_tau, "Electron_tau[nElectron]/O");
+  outTree->Branch("Electron_hadronFlavour", Electron_hadronFlavour, "Electron_hadronFlavour[nElectron]/I");
   outTree->Branch("Electron_isBaseline", Electron_isBaseline, "Electron_isBaseline[nElectron]/O");
   outTree->Branch("Electron_isTight", Electron_isTight, "Electron_isTight[nElectron]/O");
   outTree->Branch("Electron_btag", Electron_btag, "Electron_btag[nElectron]/O");
+  outTree->Branch("Electron_btagDeepB", Electron_btagDeepB, "Electron_btagDeepB[nElectron]/F");
+  outTree->Branch("Electron_btagDeepC", Electron_btagDeepC, "Electron_btagDeepC[nElectron]/F");
+  outTree->Branch("Electron_jetPt", Electron_jetPt, "Electron_jetPt[nElectron]/F");
+  outTree->Branch("Electron_jetEta", Electron_jetEta, "Electron_jetEta[nElectron]/F");
   outTree->Branch("Muon_isBaseline", Muon_isBaseline, "Muon_isBaseline[nMuon]/O");
   outTree->Branch("Muon_isTight", Muon_isTight, "Muon_isTight[nMuon]/O");
 }
@@ -286,17 +324,24 @@ fakeskim::Event::setFlags()
     std::fill_n(Electron_prompt, nE, false);
     std::fill_n(Electron_conversion, nE, false);
     std::fill_n(Electron_tau, nE, false);
+    std::fill_n(Electron_hadronFlavour, nE, 0);
 
     std::vector<unsigned> ielectrons;
     std::vector<unsigned> iphotons;
     std::vector<unsigned> itaus;
+    std::vector<unsigned> ibhadrons;
+    std::vector<unsigned> ichadrons;
 
     unsigned nG(genParts.size());
 
     for (unsigned iG(0); iG != nG; ++iG) {
       unsigned absId(std::abs(genParts.pdgId(iG)));
 
-      if (absId == 15)
+      if (((absId / 100) % 10) == 5 || ((absId / 1000) % 10) == 5)
+        ibhadrons.push_back(iG);
+      else if (((absId / 100) % 10) == 4 || ((absId / 1000) % 10) == 4)
+        ichadrons.push_back(iG);
+      else if (absId == 15)
         itaus.push_back(iG);
 
       if (genParts.status(iG) != 1 || !genParts.checkStatus(iG, nanoaod::GenPartCollection::kIsPrompt, nanoaod::GenPartCollection::kIsPromptTauDecayProduct))
@@ -315,10 +360,26 @@ fakeskim::Event::setFlags()
       Electron_prompt[iE] = electrons.deltaR2Match(iE, genParts, ielectrons, 0.01);
       Electron_conversion[iE] = electrons.deltaR2PtMatch(iE, genParts, iphotons, 0.0225, 0.5);
       Electron_tau[iE] = electrons.deltaR2Match(iE, genParts, itaus, 0.01);
+      int jetIdx(electrons.jetIdx(iE));
+      if (jetIdx >= 0)
+        Electron_hadronFlavour[iE] = jets.hadronFlavour(jetIdx);
+      else {
+        // only for electrons with no matchin jet
+        if (electrons.deltaR2Match(iE, genParts, ibhadrons, 0.16))
+          Electron_hadronFlavour[iE] = 5;
+        else if (electrons.deltaR2Match(iE, genParts, ichadrons, 0.16))
+          Electron_hadronFlavour[iE] = 4;
+        else
+          Electron_hadronFlavour[iE] = 0;
+      }
     }
   }
   
   std::fill_n(Electron_btag, nE, false);
+  std::fill_n(Electron_btagDeepB, nE, -2.);
+  std::fill_n(Electron_btagDeepC, nE, -1.);
+  std::fill_n(Electron_jetPt, nE, 0.);
+  std::fill_n(Electron_jetEta, nE, 0.);
 
   for (unsigned iE(0); iE != nE; ++iE) {
     if (!Electron_isBaseline[iE])
@@ -327,8 +388,12 @@ fakeskim::Event::setFlags()
     int jetIdx(electrons.jetIdx(iE));
     if (jetIdx < 0)
       continue;
-  
-    Electron_btag[iE] = jets.btagDeepB(jetIdx) > electronBTagMap_.get(electrons.pt(iE), std::abs(electrons.eta(iE)));
+
+    Electron_btagDeepB[iE] = jets.btagDeepB(jetIdx);
+    Electron_btagDeepC[iE] = jets.btagDeepC(jetIdx);
+    Electron_btag[iE] = Electron_btagDeepB[iE] > electronBTagMap_.get(electrons.pt(iE), std::abs(electrons.eta(iE)));
+    Electron_jetPt[iE] = jets.pt(jetIdx);
+    Electron_jetEta[iE] = jets.eta(jetIdx);
   }
 }
 
@@ -459,7 +524,8 @@ fakeskim::OppositeSignDielectronSkim::bookBranches(TTree* outTree)
   outTree->Branch("Electron_OS2E_isCaloIdLTrackIdLIsoVL", Electron_isCaloIdLTrackIdLIsoVL, "Electron_OS2E_isCaloIdLTrackIdLIsoVL[nElectron]/O");
   outTree->Branch("Electron_OS2E_mee", Electron_mee, "Electron_OS2E_mee[nElectron]/F");
   outTree->Branch("Electron_OS2E_tagWeight", Electron_tagWeight, "Electron_OS2E_tagWeight[nElectron]/F");
-  outTree->Branch("Jet_OS2E_EEOSClean", Jet_EEOSClean, "Jet_OS2E_EEOSClean[nJet]/O");
+  outTree->Branch("Electron_OS2E_njet", Electron_njet, "Electron_OS2E_njet[nElectron]/i");
+  outTree->Branch("Electron_OS2E_nbjet", Electron_nbjet, "Electron_OS2E_nbjet[nElectron]/i");
 }
 
 bool
@@ -494,12 +560,29 @@ fakeskim::OppositeSignDielectronSkim::passSkim()
     }
   }
 
+  auto& jets(event_.jets);
+  unsigned nJ(jets.size());
+  unsigned njet(0);
+  unsigned nbjet(0);
+  for (unsigned iJ(0); iJ != nJ; ++iJ) {
+    if (jets.pt(iJ) < 30. || std::abs(jets.eta(iJ)) > 4.7)
+      continue;
+
+    ++njet;
+
+    if (jets.btagDeepB(iJ) > 0.4941)
+      ++nbjet;
+  }
+
   bool hasTagAndProbePair(false);
 
   std::fill_n(Electron_isTag, nE, false);
   std::fill_n(Electron_isProbe, nE, false);
+  std::fill_n(Electron_isCaloIdLTrackIdLIsoVL, nE, false);
   std::fill_n(Electron_mee, nE, 0.);
   std::fill_n(Electron_tagWeight, nE, 0.);
+  std::fill_n(Electron_njet, nE, 0);
+  std::fill_n(Electron_nbjet, nE, 0);
   for (unsigned iTag(0); iTag != nE; ++iTag) {
     if (!event_.Electron_isTight[iTag])
       continue;
@@ -514,10 +597,22 @@ fakeskim::OppositeSignDielectronSkim::passSkim()
     if (!Electron_isTag[iTag])
       continue;
 
+    unsigned tagJetIdx(electrons.jetIdx(iTag));
+    bool tagIsJet(false);
+    bool tagIsBjet(false);
+    if (tagJetIdx < nJ && jets.pt(tagJetIdx) > 30. && std::abs(jets.eta(tagJetIdx)) < 4.7) {
+      tagIsJet = true;
+      if (jets.btagDeepB(tagJetIdx) > 0.4941)
+        tagIsBjet = true;
+    }
+
     int tagPdgId(electrons.pdgId(iTag));
     
     for (unsigned iProbe(0); iProbe != nE; ++iProbe) {
       if (iProbe == iTag)
+        continue;
+
+      if (Electron_isProbe[iProbe])
         continue;
 
       if (!event_.Electron_isBaseline[iProbe])
@@ -534,40 +629,32 @@ fakeskim::OppositeSignDielectronSkim::passSkim()
 
       // We normalize the Z peak by all baseline electrons, but are interested in trigger + tag combined efficiencies.
       // Therefore we flag the electrons matching the trigger but won't continue / return false upon mismatch
-      if (Electron_isTag[iTag]) {
-        if (event_.isMC())
-          Electron_isCaloIdLTrackIdLIsoVL[iProbe] = true;
-        else
-          Electron_isCaloIdLTrackIdLIsoVL[iProbe] = \
-            electrons.deltaR2Match(iTag, trigObjs, ele23Objs, 0.1) ||
-            electrons.deltaR2Match(iTag, trigObjs, ele12Objs, 0.1);
+      if (event_.isMC())
+        Electron_isCaloIdLTrackIdLIsoVL[iProbe] = true;
+      else
+        Electron_isCaloIdLTrackIdLIsoVL[iProbe] = \
+          electrons.deltaR2Match(iTag, trigObjs, ele23Objs, 0.1) ||
+          electrons.deltaR2Match(iTag, trigObjs, ele12Objs, 0.1);
+
+      Electron_mee[iProbe] = (electrons.p4(iTag) + electrons.p4(iProbe)).M();
+      if (event_.isMC()) {
+        Electron_tagWeight[iProbe] = \
+          event_.getScaleFactorMap(Event::Ele35_WPTight_Gsf).get(tagPt, electrons.eta(iTag)) * \
+          event_.getScaleFactorMap(Event::ElectronTightId).get(tagPt, electrons.etaSC(iTag));
       }
 
-      if (Electron_isProbe[iProbe]) {
-        Electron_mee[iProbe] = (electrons.p4(iTag) + electrons.p4(iProbe)).M();
-        if (event_.isMC()) {
-          Electron_tagWeight[iProbe] = \
-            event_.getScaleFactorMap(Event::Ele35_WPTight_Gsf).get(tagPt, electrons.eta(iTag)) * \
-            event_.getScaleFactorMap(Event::ElectronTightId).get(tagPt, electrons.etaSC(iTag));
-        }
+      Electron_njet[iProbe] = njet - (tagIsJet ? 1 : 0);
+
+      unsigned probeJetIdx(electrons.jetIdx(iProbe));
+      if (probeJetIdx < nJ && probeJetIdx != tagJetIdx && jets.pt(probeJetIdx) > 30. && std::abs(jets.eta(probeJetIdx)) < 4.7) {
+        --Electron_njet[iProbe];
+        if (jets.btagDeepB(probeJetIdx) > 0.4941)
+          --Electron_nbjet[iProbe];
       }
     }
   }
 
-  if (!hasTagAndProbePair)
-    return false;
-
-  auto& jets(event_.jets);
-  unsigned nJ(jets.size());
-
-  std::fill_n(Jet_EEOSClean, nJ, true);
-
-  for (unsigned iJ(0); iJ != nJ; ++iJ) {
-    if (jets.deltaR2Match(iJ, electrons, Electron_isTag, 0.16) || jets.deltaR2Match(iJ, electrons, Electron_isProbe, 0.16))
-      Jet_EEOSClean[iJ] = false;
-  }
-
-  return true;
+  return hasTagAndProbePair;
 }
 
 fakeskim::SameSignDielectronSkim::SameSignDielectronSkim(Event const& event) :
@@ -587,30 +674,35 @@ fakeskim::SameSignDielectronSkim::bookBranches(TTree* outTree)
 {
   outTree->Branch("leadE_SS2E", indices.data(), "leadE_SS2E/i");
   outTree->Branch("trailE_SS2E", indices.data() + 1, "trailE_SS2E/i");
+  outTree->Branch("njet_SS2E", &njet, "njet_SS2E/i");
+  outTree->Branch("nbjet_SS2E", &nbjet, "nbjet_SS2E/i");
   outTree->Branch("skimWeight_SS2E", &skimWeight, "skimWeight_SS2E/F");
 }
 
 bool
 fakeskim::SameSignDielectronSkim::passSkim()
 {
-  auto& trigObjs(event_.trigObjs);
-  std::vector<unsigned> ele23Objs;
-  std::vector<unsigned> ele12Objs;
-  if (!event_.isMC()) {
-    unsigned nO(trigObjs.size());
-    for (unsigned iO(0); iO != nO; ++iO) {
-      if (trigObjs.id(iO) != 11)
-        continue;
-      int filterBits(trigObjs.filterBits(iO));
-      double pt(trigObjs.pt(iO));
-      if ((filterBits & 1) != 0) {
-        if (pt > 23.)
-          ele23Objs.push_back(iO);
-        if (pt > 12.)
-          ele12Objs.push_back(iO);
-      }
-    }
-  }
+  // TrigObj electrons require *PixelMatchFilter in the filter name whereas the dielectron filters have
+  // name patterns *PixelMatchLeg{1,2}Filter (at least in 9_4_9, have not investigated later releases)
+
+  // auto& trigObjs(event_.trigObjs);
+  // std::vector<unsigned> ele23Objs;
+  // std::vector<unsigned> ele12Objs;
+  // if (!event_.isMC()) {
+  //   unsigned nO(trigObjs.size());
+  //   for (unsigned iO(0); iO != nO; ++iO) {
+  //     if (trigObjs.id(iO) != 11)
+  //       continue;
+  //     int filterBits(trigObjs.filterBits(iO));
+  //     double pt(trigObjs.pt(iO));
+  //     if ((filterBits & 1) != 0) {
+  //       if (pt > 23.)
+  //         ele23Objs.push_back(iO);
+  //       if (pt > 12.)
+  //         ele12Objs.push_back(iO);
+  //     }
+  //   }
+  // }
 
   auto& electrons(event_.electrons);
   unsigned nE(electrons.size());
@@ -622,11 +714,12 @@ fakeskim::SameSignDielectronSkim::passSkim()
     if (!event_.Electron_isBaseline[iE])
       continue;
 
-    // Here we strictly require that there be exactly two baseline electrons, which are same sign, and match the trigger objects
-    if (!event_.isMC()) {
-      if (!electrons.deltaR2Match(iE, trigObjs, ele23Objs, 0.1) && !electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1))
-        return false;
-    }
+    // We cannot require trigger object matching (see above)
+    // // Here we strictly require that there be exactly two baseline electrons, which are same sign, and match the trigger objects
+    // if (!event_.isMC()) {
+    //   if (!electrons.deltaR2Match(iE, trigObjs, ele23Objs, 0.1) && !electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1))
+    //     return false;
+    // }
 
     if (indices[0] == nE)
       indices[0] = iE;
@@ -638,7 +731,29 @@ fakeskim::SameSignDielectronSkim::passSkim()
     }
   }
 
-  return indices[1] != nE;
+  if (indices[1] == nE)
+    return false;
+
+  auto& jets(event_.jets);
+  unsigned nJ(jets.size());
+  njet = 0;
+  nbjet = 0;
+  unsigned jetIdx0(electrons.jetIdx(indices[0]));
+  unsigned jetIdx1(electrons.jetIdx(indices[1]));
+  for (unsigned iJ(0); iJ != nJ; ++iJ) {
+    if (iJ == jetIdx0 || iJ == jetIdx1)
+      continue;
+
+    if (jets.pt(iJ) < 30. || std::abs(jets.eta(iJ)) > 4.7)
+      continue;
+
+    ++njet;
+
+    if (jets.btagDeepB(iJ) > 0.4941)
+      ++nbjet;
+  }
+
+  return true;
 }
 
 void
@@ -691,6 +806,8 @@ fakeskim::DimuonElectronSkim::bookBranches(TTree* outTree)
   outTree->Branch("Electron_2ME_isCaloIdLTrackIdLIsoVL", Electron_isCaloIdLTrackIdLIsoVL, "Electron_2ME_isCaloIdLTrackIdLIsoVL[nElectron]/O");
   outTree->Branch("Electron_2ME_minDRMu", Electron_minDRMu, "Electron_2ME_minDRMu[nElectron]/F");
   outTree->Branch("Electron_2ME_mmme", Electron_mmme, "Electron_2ME_mmme[nElectron]/F");
+  outTree->Branch("Electron_2ME_njet", Electron_njet, "Electron_2ME_njet[nElectron]/i");
+  outTree->Branch("Electron_2ME_nbjet", Electron_nbjet, "Electron_2ME_nbjet[nElectron]/i");
   outTree->Branch("skimWeight_2ME", &skimWeight, "skimWeight_2ME/F");
 }
 
@@ -702,7 +819,7 @@ fakeskim::DimuonElectronSkim::passSkim()
 
   if (std::count(event_.Electron_isBaseline, event_.Electron_isBaseline + nE, true) == 0)
     return false;
-  
+
   auto& muons(event_.muons);
 
   unsigned nM(muons.size());
@@ -750,6 +867,12 @@ fakeskim::DimuonElectronSkim::passSkim()
     }
   }
 
+  std::fill_n(Electron_minDRMu, nE, 0.);
+  std::fill_n(Electron_isCaloIdLTrackIdLIsoVL, nE, false);
+  std::fill_n(Electron_mmme, nE, 0.);
+  std::fill_n(Electron_njet, nE, 0);
+  std::fill_n(Electron_nbjet, nE, 0);
+
   bool hasElectron(false);
 
   for (unsigned iE(0); iE != nE; ++iE) {
@@ -773,6 +896,40 @@ fakeskim::DimuonElectronSkim::passSkim()
 
   if (!hasElectron)
     return false;
+
+  auto& jets(event_.jets);
+  unsigned nJ(jets.size());
+  unsigned njet(0);
+  unsigned nbjet(0);
+  unsigned jetIdxMu0(muons.jetIdx(tightMu[0]));
+  unsigned jetIdxMu1(muons.jetIdx(tightMu[1]));
+  for (unsigned iJ(0); iJ != nJ; ++iJ) {
+    if (iJ == jetIdxMu0 || iJ == jetIdxMu1)
+      continue;
+
+    if (jets.pt(iJ) < 30. || std::abs(jets.eta(iJ)) > 4.7)
+      continue;
+
+    ++njet;
+
+    if (jets.btagDeepB(iJ) > 0.4941)
+      ++nbjet;
+  }
+
+  for (unsigned iE(0); iE != nE; ++iE) {
+    if (!event_.Electron_isBaseline[iE])
+      continue;
+
+    Electron_njet[iE] = njet;
+    Electron_nbjet[iE] = nbjet;
+
+    unsigned jetIdx(electrons.jetIdx(iE));
+    if (jetIdx < nJ && jetIdx != jetIdxMu0 && jetIdx != jetIdxMu1 && jets.pt(jetIdx) > 30. && std::abs(jets.eta(jetIdx)) < 4.7) {
+      --Electron_njet[iE];
+      if (jets.btagDeepB(jetIdx) > 0.4941)
+        --Electron_nbjet[iE];
+    }
+  }
 
   if (event_.isMC()) {
     double pt0(muons.pt(tightMu[0]));
@@ -811,6 +968,8 @@ fakeskim::DimuonPhotonSkim::bookBranches(TTree* outTree)
   outTree->Branch("mmm_2MG", &mmm, "mmm_2MG/F");
   outTree->Branch("Photon_2MG_minDRMu", Photon_minDRMu, "Photon_2MG_minDRMu[nPhoton]/F");
   outTree->Branch("Photon_2MG_mmmg", Photon_mmmg, "Photon_2MG_mmmg[nPhoton]/F");
+  outTree->Branch("Photon_2MG_njet", Photon_njet, "Photon_2MG_njet[nElectron]/i");
+  outTree->Branch("Photon_2MG_nbjet", Photon_nbjet, "Photon_2MG_nbjet[nElectron]/i");
   outTree->Branch("skimWeight_2MG", &skimWeight, "skimWeight_2MG/F");
 }
 
@@ -848,12 +1007,58 @@ fakeskim::DimuonPhotonSkim::passSkim()
   auto& photons(event_.photons);
   unsigned nP(photons.size());
 
+  std::fill_n(Photon_minDRMu, nP, 0.);
+  std::fill_n(Photon_mmmg, nP, 0.);
+  std::fill_n(Photon_njet, nP, 0);
+  std::fill_n(Photon_nbjet, nP, 0);
+
+  bool hasPhoton(false);
+
   for (unsigned iP(0); iP != nP; ++iP) {
     if ((photons.cutBasedBitmap(iP) & 2) == 0)
       continue;
 
+    hasPhoton = true;
+
     Photon_minDRMu[iP] = std::sqrt(std::min(photons.deltaR2(iP, muons, tightMu[0]), photons.deltaR2(iP, muons, tightMu[1])));
     Photon_mmmg[iP] = (pmm + photons.p4(iP)).M();
+  }
+
+  if (!hasPhoton)
+    return false;
+
+  auto& jets(event_.jets);
+  unsigned nJ(jets.size());
+  unsigned njet(0);
+  unsigned nbjet(0);
+  unsigned jetIdxMu0(muons.jetIdx(tightMu[0]));
+  unsigned jetIdxMu1(muons.jetIdx(tightMu[1]));
+  for (unsigned iJ(0); iJ != nJ; ++iJ) {
+    if (iJ == jetIdxMu0 || iJ == jetIdxMu1)
+      continue;
+
+    if (jets.pt(iJ) < 30. || std::abs(jets.eta(iJ)) > 4.7)
+      continue;
+
+    ++njet;
+
+    if (jets.btagDeepB(iJ) > 0.4941)
+      ++nbjet;
+  }
+
+  for (unsigned iP(0); iP != nP; ++iP) {
+    if ((photons.cutBasedBitmap(iP) & 2) == 0)
+      continue;
+
+    Photon_njet[iP] = njet;
+    Photon_nbjet[iP] = nbjet;
+
+    unsigned jetIdx(photons.jetIdx(iP));
+    if (jetIdx < nJ && jetIdx != jetIdxMu0 && jetIdx != jetIdxMu1 && jets.pt(jetIdx) > 30. && std::abs(jets.eta(jetIdx)) < 4.7) {
+      --Photon_njet[iP];
+      if (jets.btagDeepB(jetIdx) > 0.4941)
+        --Photon_nbjet[iP];
+    }
   }
 
   if (event_.isMC()) {
@@ -890,6 +1095,8 @@ fakeskim::SameSignMuonElectronSkim::bookBranches(TTree* outTree)
 {
   outTree->Branch("tightMu_SSME", &tightMu, "tightMu_SSME/i");
   outTree->Branch("skimWeight_SSME", &skimWeight, "skimWeight_SSME/F");
+  outTree->Branch("njet_SSME", &njet, "njet_SSME/i");
+  outTree->Branch("nbjet_SSME", &nbjet, "nbjet_SSME/i");
 }
 
 bool
@@ -936,19 +1143,21 @@ fakeskim::SameSignMuonElectronSkim::passSkim()
   auto& electrons(event_.electrons);
   unsigned nE(electrons.size());
 
-  bool oneBaseline(false);
+  int iBaseline(-1);
 
   for (unsigned iE(0); iE != nE; ++iE) {
     if (!event_.Electron_isBaseline[iE])
       continue;
 
-    if (oneBaseline)
-      return false;
+    if (iBaseline != -1) {
+      iBaseline = -1;
+      break;
+    }
 
     if (electrons.charge(iE) != muons.charge(tightMu))
       return false;
 
-    oneBaseline = true;
+    iBaseline = iE;
 
     // Here the requirement is exactly one baseline electron, which has the same charge as the muon, and matches the trigger object.
     if (!event_.isMC()) {
@@ -957,8 +1166,27 @@ fakeskim::SameSignMuonElectronSkim::passSkim()
     }
   }
 
-  if (!oneBaseline)
+  if (iBaseline == -1)
     return false;
+
+  auto& jets(event_.jets);
+  unsigned nJ(jets.size());
+  njet = 0;
+  nbjet = 0;
+  unsigned jetIdxMu(muons.jetIdx(tightMu));
+  unsigned jetIdxE(electrons.jetIdx(iBaseline));
+  for (unsigned iJ(0); iJ != nJ; ++iJ) {
+    if (iJ == jetIdxMu || iJ == jetIdxE)
+      continue;
+
+    if (jets.pt(iJ) < 30. || std::abs(jets.eta(iJ)) > 4.7)
+      continue;
+
+    ++njet;
+
+    if (jets.btagDeepB(iJ) > 0.4941)
+      ++nbjet;
+  }
 
   if (event_.isMC()) {
     double pt(muons.pt(tightMu));
@@ -989,6 +1217,8 @@ fakeskim::JetElectronSkim::bookBranches(TTree* outTree)
 {
   outTree->Branch("Electron_JE_minDPhiJet", Electron_minDPhiJet, "Electron_JE_minDPhiJet[nElectron]");
   outTree->Branch("Electron_JE_ptOppJet", Electron_ptOppJet, "Electron_JE_ptOppJet[nElectron]");
+  outTree->Branch("Electron_JE_njet", Electron_njet, "Electron_JE_njet[nElectron]/i");
+  outTree->Branch("Electron_JE_nbjet", Electron_nbjet, "Electron_JE_nbjet[nElectron]/i");
 }
   
 bool
@@ -1018,44 +1248,130 @@ fakeskim::JetElectronSkim::passSkim()
   unsigned nE(electrons.size());
   unsigned nJ(jets.size());
 
-  bool oneElectron(false);
+  std::fill_n(Electron_minDPhiJet, nE, 0.);
+  std::fill_n(Electron_ptOppJet, nE, 0.);
+
+  int iElectron(-1);
 
   for (unsigned iE(0); iE != nE; ++iE) {
     if (!event_.Electron_isBaseline[iE])
       continue;
 
-    if (oneElectron)
-      return false;
+    if (iElectron != -1) {
+      iElectron = -1;
+      break;
+    }
 
     if (!event_.isMC()) {
       if (!electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1))
         return false;
     }
 
-    oneElectron = true;
-
-    double phi(electrons.phi(iE));
-    unsigned jetIdx(electrons.jetIdx(iE));
-
-    double minDPhi(-1.);
-    double maxDPhi(-1.);
-    double ptMaxDPhi(0.);
-    for (unsigned iJ(0); iJ != nJ; ++iJ) {
-      if (iJ == jetIdx)
-        continue;
-      
-      double dPhi(std::abs(TVector2::Phi_mpi_pi(jets.phi(iJ) - phi)));
-      if (minDPhi < 0. || dPhi < minDPhi)
-        minDPhi = dPhi;
-      if (dPhi > maxDPhi) {
-        maxDPhi = dPhi;
-        ptMaxDPhi = jets.pt(iJ);
-      }
-    }
-
-    Electron_minDPhiJet[iE] = minDPhi;
-    Electron_ptOppJet[iE] = ptMaxDPhi;
+    iElectron = iE;
   }
 
+  if (iElectron == -1)
+    return false;
+
+  unsigned njet(0);
+  unsigned nbjet(0);
+  double phi(electrons.phi(iElectron));
+  unsigned jetIdx(electrons.jetIdx(iElectron));
+
+  double minDPhi(-1.);
+  double maxDPhi(-1.);
+  double ptMaxDPhi(0.);
+  for (unsigned iJ(0); iJ != nJ; ++iJ) {
+    if (iJ == jetIdx)
+      continue;
+
+    if (jets.pt(iJ) > 30. && std::abs(jets.eta(iJ)) < 4.7) {
+      ++njet;
+
+      if (jets.btagDeepB(iJ) > 0.4941)
+        ++nbjet;
+    }
+      
+    double dPhi(std::abs(TVector2::Phi_mpi_pi(jets.phi(iJ) - phi)));
+    if (minDPhi < 0. || dPhi < minDPhi)
+      minDPhi = dPhi;
+    if (dPhi > maxDPhi) {
+      maxDPhi = dPhi;
+      ptMaxDPhi = jets.pt(iJ);
+    }
+  }
+
+  Electron_minDPhiJet[iElectron] = minDPhi;
+  Electron_ptOppJet[iElectron] = ptMaxDPhi;
+  Electron_njet[iElectron] = njet;
+  Electron_nbjet[iElectron] = nbjet;
+
   return true;
+}
+
+fakeskim::ElectronSkim::ElectronSkim(Event const& event) :
+  FakeSkim(event)
+{
+  triggers_.push_back("HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL");
+  triggers_.push_back("HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL");
+  triggers_.push_back("HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ");
+  triggers_.push_back("HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ");
+  triggers_.push_back("HLT_Ele12_CaloIdL_TrackIdL_IsoVL_PFJet30");
+}
+
+fakeskim::ElectronSkim::ElectronSkim(ElectronSkim const& orig) :
+  FakeSkim(orig)
+{
+  triggers_.push_back("HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL");
+  triggers_.push_back("HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL");
+  triggers_.push_back("HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ");
+  triggers_.push_back("HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ");
+  triggers_.push_back("HLT_Ele12_CaloIdL_TrackIdL_IsoVL_PFJet30");
+}
+
+void
+fakeskim::ElectronSkim::bookBranches(TTree* outTree)
+{
+  outTree->Branch("Electron_E_isCaloIdLTrackIdLIsoVL", Electron_isCaloIdLTrackIdLIsoVL, "Electron_E_isCaloIdLTrackIdLIsoVL[nElectron]/O");
+}
+
+bool
+fakeskim::ElectronSkim::passSkim()
+{
+  auto& trigObjs(event_.trigObjs);
+  std::vector<unsigned> ele23Objs;
+  std::vector<unsigned> ele12Objs;
+  if (!event_.isMC()) {
+    unsigned nO(trigObjs.size());
+    for (unsigned iO(0); iO != nO; ++iO) {
+      if (trigObjs.id(iO) != 11)
+        continue;
+      int filterBits(trigObjs.filterBits(iO));
+      double pt(trigObjs.pt(iO));
+      if ((filterBits & 1) != 0) {
+        if (pt > 23.)
+          ele23Objs.push_back(iO);
+        if (pt > 12.)
+          ele12Objs.push_back(iO);
+      }
+    }
+  }
+
+  auto& electrons(event_.electrons);
+  unsigned nE(electrons.size());
+
+  std::fill_n(Electron_isCaloIdLTrackIdLIsoVL, nE, false);
+
+  bool hasElectron(false);
+
+  for (unsigned iE(0); iE != nE; ++iE) {
+    if (!event_.Electron_isBaseline[iE])
+      continue;
+
+    hasElectron = true;
+
+    Electron_isCaloIdLTrackIdLIsoVL[iE] = electrons.deltaR2Match(iE, trigObjs, ele23Objs, 0.1) || electrons.deltaR2Match(iE, trigObjs, ele12Objs, 0.1);
+  }
+
+  return hasElectron;
 }

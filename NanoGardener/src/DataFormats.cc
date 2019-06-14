@@ -33,12 +33,14 @@ namespace nanoaod {
     {'O', "tightId"},
     {'O', "isPFcand"},
     {'F', "pfRelIso04_all"},
-    {'I', "nStations"}
+    {'I', "nStations"},
+    {'I', "jetIdx"}
   }};
 
   std::array<BranchConf, PhotonCollection::nUniqueBranches> const PhotonCollection::branchConfs{{
     {'I', "cutBasedBitmap"},
-    {'O', "electronVeto"}
+    {'O', "electronVeto"},
+    {'I', "jetIdx"}
   }};
 
   std::array<BranchConf, LeptonCollection::nUniqueBranches> const LeptonCollection::branchConfs{{

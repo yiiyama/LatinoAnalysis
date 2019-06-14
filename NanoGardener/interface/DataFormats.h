@@ -225,6 +225,7 @@ namespace nanoaod {
       _isPFcand,
       _pfRelIso04_all,
       _nStations,
+      _jetIdx,
       nBranches
     };
     static constexpr unsigned nUniqueBranches{nBranches - BaseLeptonCollection::nBranches};
@@ -234,6 +235,7 @@ namespace nanoaod {
     bool isPFcand(unsigned iM) const { return getO(_isPFcand, iM); }
     double pfRelIso04_all(unsigned iM) const { return getF(_pfRelIso04_all, iM); }
     int nStations(unsigned iM) const { return getI(_nStations, iM); }
+    int jetIdx(unsigned iM) const { return getI(_jetIdx, iM); }
   };
 
   class PhotonCollection : public ParticleCollection {
@@ -245,6 +247,7 @@ namespace nanoaod {
     enum Branch {
       _cutBasedBitmap = ParticleCollection::nBranches,
       _electronVeto,
+      _jetIdx,
       nBranches
     };
     static constexpr unsigned nUniqueBranches{nBranches - ParticleCollection::nBranches};
@@ -252,6 +255,7 @@ namespace nanoaod {
 
     int cutBasedBitmap(unsigned iP) const { return getI(_cutBasedBitmap, iP); }
     bool electronVeto(unsigned iP) const { return getO(_electronVeto, iP); }
+    int jetIdx(unsigned iP) const { return getI(_jetIdx, iP); }
   };
 
   class LeptonCollection : public BaseLeptonCollection {

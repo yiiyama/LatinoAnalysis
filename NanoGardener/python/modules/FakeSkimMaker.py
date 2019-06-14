@@ -137,7 +137,7 @@ class FakeSkimMaker(Module):
             else:
                 skims.pop(iskim)
 
-        if len(skims):
+        if len(skims) == 0:
             return False
 
         self.event.setFlags()
